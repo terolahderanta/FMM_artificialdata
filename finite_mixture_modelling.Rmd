@@ -1,0 +1,275 @@
+---
+title: "Finite mixture modelling"
+author: "Tero Lähderanta & Markku Kuismin"
+date: "13.1.2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, load the necessary libraries. In addition to the `rpack` package, we use `tidyverse` and `dplyr` for sample data manipulation and `ggplot2` for plotting.
+
+```{r message=FALSE, warning=FALSE}
+#install.packages("lcmix", repos=c("http://R-Forge.R-project.org",
+#                                   "http://cran.at.r-project.org"),dependencies=TRUE)
+library(rpack)
+library(tidyverse)
+library(LaplacesDemon)
+library(Matrix)
+library(plotly)
+library(Gmedian)
+library(lcmix) # Added by Markku. Package can be found at R-Forge
+library(parallel) # For parallel computing. rpack uses function "detectCores".
+library(flexmix)
+```
+
+## External functions
+
+These are added by Markku. These external functions generate data from gamma distribution. Weights are determined either by 1) chance 2 ) based on the distance from the distribution mean: the greater the Euclidean distance between the point and the population mean is, the larger the weight is. `simulate_unif_grid` is a sub-function of the main function `simulate_gamma_mixture`.
+
+```{r}
+source("CodeCollection/simulate_gamma_mixture.R")
+source("CodeCollection/simulate_unif_grid.R")
+source("CodeCollection/utility_functions.R")
+
+# Get the colors for plotting
+c_col <- get_cols() 
+```
+
+## Simple example
+
+For testing purposes, we first generate small and simple data set to test package flexm.
+
+```{r}
+# Simple data set
+m1 <- 0
+m2 <- 50
+sd1 <- sd2 <- 5
+N1 <- 100
+N2 <- 10
+
+a <- rnorm(n=N1, mean=m1, sd=sd1)
+b <- rnorm(n=N2, mean=m2, sd=sd2)
+
+x <- c(a,b)
+class <- c(rep('a', N1), rep('b', N2))
+data <- data.frame(cbind(x=as.numeric(x), class=as.factor(class)))
+```
+
+Fit two gaussians to the data.
+
+```{r}
+library("ggplot2")
+p <- ggplot(data, aes(x = x)) + 
+  geom_histogram(aes(x, ..density..), binwidth = 1, colour = "black", fill = "white") +
+  geom_vline(xintercept = m1, col = "red", size = 2) + 
+  geom_vline(xintercept = m2, col = "blue", size = 2)
+p
+
+set.seed(0)
+
+mo1 <- FLXMRglm(family = "gaussian")
+mo2 <- FLXMRglm(family = "gaussian")
+flexfit <- flexmix(x ~ 1, data = data, k = 2, model = list(mo1, mo2))
+
+# So how did we do? It looks like we got class assignments perfectly
+
+print(table(clusters(flexfit), data$class))
+```
+
+Lastly, let's visualize the fitted model along with the data.
+
+```{r}
+c1 <- parameters(flexfit, component=1)[[1]]
+c2 <- parameters(flexfit, component=2)[[1]]
+
+#' Source: http://tinyheero.github.io/2015/10/13/mixture-model.html
+#' Plot a Mixture Component
+#' 
+#' @param x Input data
+#' @param mu Mean of component
+#' @param sigma Standard deviation of component
+#' @param lam Mixture weight of component
+plot_mix_comps <- function(x, mu, sigma, lam) {
+  lam * dnorm(x, mu, sigma)
+}
+
+lam <- table(clusters(flexfit))
+  
+ggplot(data) +
+geom_histogram(aes(x, ..density..), binwidth = 1, colour = "black", fill = "white") +
+stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(c1[1], c1[2], lam[1]/sum(lam)),
+                colour = "red", lwd = 1.5) +
+stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(c2[1], c2[2], lam[2]/sum(lam)),
+                colour = "blue", lwd = 1.5) +
+ylab("Density")
+```
+
+All good here!
+
+## Simulated data
+
+Let's set up some data to be clustered. To ease cluster overlap, clusters are placed on a grid.
+
+Outliers are sampled uniformly on the cluster grid.
+
+Some simulated clusters have heavy weight points at edge of clusters (50/50 chance).\*\*
+
+```{r}
+# Initialize seed number:
+#seed = Sys.time()
+#seed = as.integer(seed)
+#seed = seed %% 100000
+seed = 10376
+set.seed(seed)
+k = 10 # ten clusters
+n = c(20, 40, 60, 80, 50, 80, 60, 40, 20, 50) # uneven cluster sizes
+n_out = 20 # nmb of outliers
+
+# Generating 500 points from mixture of 10 gamma distributions.
+test_dat = simulate_gamma_mixture(
+  n,
+  k,
+  n_out = n_out,
+  out_scale = 5,
+  scale_between_range = c(0, 1),
+  outgroup_alpha = 0.4,
+  place_on_grid = T,
+  overlap_scale = 0.5
+)
+true_mu <- test_dat$mu_true
+test_dat <- test_dat$Y
+
+# Ids in interactive plot
+id <-  1:nrow(test_dat)
+
+plot_sim <-
+  ggplot(data = test_dat, aes(
+    x = x,
+    y = y,
+    size = w,
+    label = id
+  )) +
+  geom_point() +
+  scale_size(range = c(2, 6)) +  # Scale objects sizes
+  guides(color = guide_legend(# Point size in legend
+    override.aes = list(size = 5))) +
+  labs(x = "x", y = "y", title = "Unclustered data") +
+  theme(
+    legend.position = "right",
+    # Legend position and removing ticks from axis
+    axis.text.x = ggplot2::element_blank(),
+    axis.text.y = ggplot2::element_blank(),
+    axis.ticks = ggplot2::element_blank()
+  )
+
+ggplotly(plot_sim, tooltip = c("id", "w"))
+```
+
+Fit a normal mixture model to the data we just simulated.
+
+```{r}
+formula <- cbind(test_dat$x, test_dat$y) ~ 1
+set.seed(1)
+test_flexfit <- flexmix(
+  formula = formula,
+  k = k,
+  model = FLXMCmvnorm(diag = T))
+
+print(table(clusters(test_flexfit), test_dat$orig_group))
+```
+
+Interestingly, we were able to find only 7 clusters.
+
+```{r, include=FALSE}
+fit_mu <- test_flexfit |> 
+  parameters() |>
+  {\(x) x[paste("center", 1:2, sep = ""),]}() |> 
+  t()
+
+fit_cov <- test_flexfit |> 
+  parameters() |> 
+  {\(x) x[paste("cov", 1:4, sep = ""),]}() |> 
+  t() |> 
+  split(f = 1:7) |> 
+  vapply(FUN = function(x) matrix(x, nrow = 2, ncol = 2),
+         FUN.VALUE = matrix(rep(1,4), ncol = 2, nrow = 2))
+
+data_grid <- expand.grid(x = seq(0, 1, length.out = 100), y = seq(0, 1, length.out = 100))
+
+
+m <- c(.5, -.5)
+sigma <- matrix(c(1,.5,.5,1), nrow=2)
+data.grid <- expand.grid(s.1 = seq(-3, 3, length.out=200), s.2 = seq(-3, 3, length.out=200))
+q.samp <- cbind(data.grid, prob = mvtnorm::dmvnorm(data.grid, mean = m, sigma = sigma))
+ggplot(q.samp, aes(x=s.1, y=s.2, z=prob)) + 
+    geom_contour() +
+    coord_fixed(xlim = c(-3, 3), ylim = c(-3, 3), ratio = 1) 
+```
+
+## Model-based clustring with stan
+
+Let's use `rstan` to perform Bayesian model based clustering.
+
+```{r}
+#install.packages("rstan", repos = "https://cloud.r-project.org/", dependencies = TRUE)
+library("rstan") 
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+### Simple example
+
+We test `rstan` with the eigth schools example presented in Section 5.5 of Gelman et al (2003). File *schools.stan* is creted in folder *stan_files*.
+
+```{r}
+# Prepare data
+schools_dat <- list(J = 8, 
+                    y = c(28,  8, -3,  7, -1,  1, 18, 12),
+                    sigma = c(15, 10, 16, 11,  9, 11, 10, 18))
+
+# Fit the model
+fit <- stan(file = 'stan_files/schools.stan', data = schools_dat)
+```
+
+Examine the results.
+
+```{r}
+print(fit)
+plot(fit)
+pairs(fit, pars = c("mu", "tau", "lp__"))
+
+la <- extract(fit, permuted = TRUE) # return a list of arrays 
+mu <- la$mu 
+
+### return an array of three dimensions: iterations, chains, parameters 
+a <- extract(fit, permuted = FALSE) 
+
+### use S3 functions on stanfit objects
+a2 <- as.array(fit)
+m <- as.matrix(fit)
+d <- as.data.frame(fit)
+
+traceplot(fit, pars = c("mu", "tau"), inc_warmup = TRUE, nrow = 2)
+```
+
+### Stan with simulated data
+
+Use rstan to create a general finite mixture model for the simulated data.
+
+```{r}
+# Take a small subset of data
+dat_sub <- test_dat |> sample_n(size = 50)
+
+# Prepare data
+clust_dat <- list(N = nrow(dat_sub), 
+                  y = dat_sub$y,
+                  K = 3)
+
+# Fit the model
+fit_test <- stan(file = 'stan_files/gmm.stan', data = clust_dat)
+```

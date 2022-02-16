@@ -1,0 +1,265 @@
+---
+title: 'Clustering with multiple constraints and attributes: Simulated example'
+author: "Tero Lähderanta"
+date: "`r format(Sys.time(), '%d.%m.%Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, load the necessary libraries. In addition to the `rpack` package, we use `tidyverse` and `dplyr` for sample data manipulation and `ggplot2` for plotting.
+
+```{r message=FALSE}
+#install.packages("lcmix", repos=c("http://R-Forge.R-project.org",
+#                                   "http://cran.at.r-project.org"),dependencies=TRUE)
+library(rpack)
+library(tidyverse)
+library(LaplacesDemon)
+library(Matrix)
+library(plotly)
+library(Gmedian)
+library(lcmix) # Added by Markku. Package can be found at R-Forge
+library(parallel) # For parallel computing. rpack uses function "detectCores".
+library(flexmix)
+library(patchwork)
+library(purrr)
+library(broman)
+#devtools::install_github("jamesotto852/ggdensity")
+library(ggdensity)
+library(targets)
+library(MASS)
+library(conflicted)
+library(scales)
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+```
+
+These external functions generate data from gamma distribution. Weights are determined either by 1) chance 2 ) based on the distance from the distribution mean: the greater the Euclidean distance between the point and the population mean is, the larger the weight is. `simulate_unif_grid` is a sub-function of the main function `simulate_gamma_mixture`.
+
+```{r}
+source("CodeCollection/simulate_gamma_mixture.R")
+source("CodeCollection/simulate_unif_grid.R")
+source("CodeCollection/utility_functions.R")
+source("functions_rpack.R")
+source("functions_summary.R")
+
+# Get the colors for plotting
+c_col <- get_cols() 
+```
+
+# Evaluation with simulated data
+
+In this section we introduce the properties of PACK extensions with a controlled setup. First we generate multiple random data sets, where the original clustering is known and consequently we can analyze the goodness of the algorithm with the selected parameters. 
+
+## Simulated data
+
+Data points are simulated from a gamma mixture distribution with varying shape and scale parameters and the weigths of the data points are simulated from a uniform distribution, such that the weigths are between 1 and 100. 
+
+Let's set up some data to be clustered.
+
+-   To ease cluster overlap, clusters are placed on a grid
+
+-   Outliers are sampled uniformly on the cluster grid. Some simulated clusters have heavy weight points at edge of clusters (50/50 chance)\*\*
+
+-   We study the scalability of the algorithm by simulating different sizes of data sets
+
+-   Different non-spatial attributes are added to the analysis
+
+
+Next, we create non-spatial attributes by dividing data points to four sections as shown below.
+
+
+```{r warning=FALSE}
+
+dat <- create_data_example(seed = 329689)
+
+# Plot the example data 
+plot_division_example(dat)
+# ggsave(filename = "images/plot_division_example.png",
+#        width = 5,
+#        height = 5)
+```
+
+Visualize the distribution of non-spatial attributes in each section.
+```{r}
+# Parameters for the simulated distribution of non-spatial attributes
+params <- tribble(
+    ~group, ~mu, ~Sigma,
+    1, c(1, 5, 7), diag(c(1,2,2)),
+    2, c(4, 5, 6), diag(c(1,0.5,1)),
+    3, c(8, 4, 1), diag(c(2,2,2)),
+    4, c(5, 7, 3), diag(c(1,1,2)),
+  )
+
+dat$Y |> 
+  pivot_longer(cols = c("par1", "par2", "par3"),
+               names_to = "non_spat_par") |>
+  mutate(non_spat_group = paste("Section", non_spat_group)) |> 
+  ggplot()+
+  geom_boxplot(aes(y = value, 
+                   #x = non_spat_group,
+                   color = non_spat_par)) +
+  facet_grid(cols = vars(non_spat_group)) +
+  guides(color=guide_legend(title="Non-spatial attribute:")) +
+  theme_bw() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "bottom")
+# ggsave(filename = "images/plot_nonspat_example.png",
+#        width = 6,
+#        height = 5)
+```
+
+```{r}
+colpal <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+plot_point_gradient(dat$Y,
+                    "par1",
+                    colpal[1]) /
+  plot_point_gradient(dat$Y,
+                      "par2",
+                      colpal[2]) /
+  plot_point_gradient(dat$Y,
+                      "par3",
+                      colpal[3])
+
+# ggsave(filename = "images/plot_nonspat_distribution1.png",
+#        width = 4,
+#        height = 9)
+```
+
+```{r}
+dat$Y |> 
+  mutate(r_par1 = rescale(par1, c(0,1)),
+         g_par2 = rescale(par2, c(0,1)),
+         b_par3 = rescale(par3, c(0,1))) |> 
+  ggplot() +
+  geom_point(aes(x = x, y = y, color = rgb(r_par1, g_par2, b_par3), size = w)) +
+  scale_size(range = c(2, 6)) +
+  guides(size = "none", color = "none") +
+    labs(x = "x", y = "y") +
+    theme(
+      legend.position = "right",
+      axis.text.x = ggplot2::element_blank(),
+      axis.text.y = ggplot2::element_blank(),
+      axis.ticks = ggplot2::element_blank()
+    )+
+    coord_fixed(ratio = 1)
+
+# ggsave(filename = "images/plot_nonspat_distribution2.png",
+#        width = 5,
+#        height = 4)
+
+```
+
+Let's then simulate $N$ data sets from gamma mixture with different data points and non-spatial attributes. 
+
+```{r}
+# Simulate 4 data sets from gamma mixture
+tar_load(list_dat100)
+```
+
+Visualize the data sets:
+
+```{r warning=FALSE}
+# Make plot from each list element
+plots_dat100 <- list_dat100 |> 
+  map(plot_nonspat_attributes) 
+
+plot_pw <- 
+plots_dat100[[1]] + 
+  plots_dat100[[2]] + 
+  plots_dat100[[3]] + 
+  plots_dat100[[4]] + 
+  patchwork::plot_layout(guides = "collect")
+
+plot_pw  
+```
+
+To generate non-spatial attributes, we simulate one value from 3D multinormal distribution. Each non-spatial group has different parameters for the normal distribution. 
+
+```{r}
+plot_pars <- list_dat100[[1]]$Y |> 
+    ggplot() +
+    geom_point(aes(x = x, 
+                   y = y, 
+                   #size = w, 
+                   color = orig_group,
+                   fill = orig_group,
+                   shape = is_outlier,
+                   label = par1,
+                   label2 = par2,
+                   label3 = par3), 
+               size = 3,
+               stroke = 1.5) +
+    geom_vline(xintercept = list_dat100[[1]]$div[1]) + 
+    geom_hline(yintercept = list_dat100[[1]]$div[2]) + 
+    guides(size = "none", fill = "none") +
+    scale_color_discrete(name = "Original clusters") +
+    scale_shape_manual(values = c(21,4)) +
+    guides(colour = guide_legend(override.aes = list(size=5)),
+           shape = "none")
+
+ggplotly(plot_pars, tooltip = c("par1", "par2", "par3"))
+```
+
+
+## Clustering
+
+```{r}
+tar_load(clust1)
+tar_load(clust2)
+tar_load(clust3)
+tar_load(clust4)
+
+##clust_dat4[[1]]
+plot_clust1 <- plot_clust_list(
+  list_dat100,
+  clust1
+)
+
+plot_clust1
+
+plot_clust2 <- plot_clust_list(
+  list_dat100,
+  clust2
+)
+
+plot_clust2
+
+plot_clust3 <- plot_clust_list(
+  list_dat100,
+  clust3
+)
+
+plot_clust3
+
+plot_clust4 <- plot_clust_list(
+  list_dat100,
+  clust4
+)
+
+plot_clust4
+```
+
+```{r, eval = FALSE}
+clust_names <- paste("lambda=", seq(0.1, 1, by = 0.1), sep="")
+
+clust1_proximity_summary <-
+  proximity_summary(clust_list = clust1[[1]][-1],
+                    names = clust_names,
+                    dat = list_dat100[[1]]$Y)
+
+clust1_proximity_summary
+
+clust1_duration_summary = duration_sd_summary(
+    clust_list = clust1[[1]][-1],
+    names = clust_names,
+    dat = list_dat100[[1]]$Y
+  )
+
+clust1_duration_summary
+
+```
+

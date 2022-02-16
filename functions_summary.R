@@ -1,3 +1,8 @@
+percentage_of_correct <- function(dat, clust){
+  
+}
+
+
 duration_sd_summary <- function(clust_list, names, dat){
   
   k <- clust_list[[1]]$cluster %>% unique() %>% length()

@@ -149,7 +149,7 @@ dat$Y |>
 
 # ggsave(filename = "images/plot_nonspat_distribution2.png",
 #        width = 5,
-#        height = 4)
+#        height = 5)
 
 ```
 
@@ -259,7 +259,44 @@ clust1_duration_summary = duration_sd_summary(
     dat = list_dat100[[1]]$Y
   )
 
-clust1_duration_summary
+
+# Combined table
+clust1_duration_summary |> 
+  select(name, Mean) |> 
+  mutate(par = str_sub(name, 1,4), .after = 1) |> 
+  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
+  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
+  full_join(clust1_proximity_summary, by = "name") |> 
+  select(-S.D., -Min, -Max, -`100%`,-`  0%`) |> 
+  xtable::xtable() |> 
+  print(include.rownames = FALSE)
 
 ```
+
+```{r}
+clust2_proximity_summary <-
+  proximity_summary(clust_list = clust2[[1]][-1],
+                    names = clust_names,
+                    dat = list_dat100[[1]]$Y)
+
+
+clust2_duration_summary = duration_sd_summary(
+    clust_list = clust2[[1]][-1],
+    names = clust_names,
+    dat = list_dat100[[1]]$Y
+  )
+
+
+# Combined table
+clust2_duration_summary |> 
+  select(name, Mean) |> 
+  mutate(par = str_sub(name, 1,4), .after = 1) |> 
+  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
+  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
+  full_join(clust2_proximity_summary, by = "name") |> 
+  select(-S.D., -Min, -Max, -`100%`,-`  0%`) |> 
+  xtable::xtable() |> 
+  print(include.rownames = FALSE)
+```
+
 

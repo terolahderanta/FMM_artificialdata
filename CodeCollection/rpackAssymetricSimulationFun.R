@@ -1,4 +1,6 @@
 
+
+
 # 31.03.2020
 
 # The intersection of location-allocation and partitional clustering
@@ -67,54 +69,22 @@ test_dat <- test_dat$Y
 # Ids in interactive plot
 id <-  1:nrow(test_dat)
 plot_sim <- ggplot(data = test_dat, aes(x = x, y = y, size = w, label = id)) +
-geom_point() +
-scale_size(range = c(2, 6)) +  # Scale objects sizes
-guides(
-color = guide_legend(        # Point size in legend
-override.aes = list(size=5)
-)
-) +
-labs(x = "x", y = "y", title = "Unclustered data") +
-theme(
-legend.position = "right",            # Legend position and removing ticks from axis
-axis.text.x = ggplot2::element_blank(),
-axis.text.y = ggplot2::element_blank(),
-axis.ticks = ggplot2::element_blank()
-)
+  geom_point() +
+  scale_size(range = c(2, 6)) +  # Scale objects sizes
+  guides(
+    color = guide_legend(        # Point size in legend
+      override.aes = list(size=5)
+    )
+  ) +
+  labs(x = "x", y = "y", title = "Unclustered data") +
+  theme(
+    legend.position = "right",            # Legend position and removing ticks from axis
+    axis.text.x = ggplot2::element_blank(),
+    axis.text.y = ggplot2::element_blank(),
+    axis.ticks = ggplot2::element_blank()
+  )
 ggplotly(plot_sim, tooltip = c("id", "w"))
 
-#### Clustering with finite mixture models (flexm)
-# Simple data set
-m1 <- 0
-m2 <- 50
-sd1 <- sd2 <- 5
-N1 <- 100
-N2 <- 10
-
-a <- rnorm(n=N1, mean=m1, sd=sd1)
-b <- rnorm(n=N2, mean=m2, sd=sd2)
-
-x <- c(a,b)
-class <- c(rep('a', N1), rep('b', N2))
-data <- data.frame(cbind(x=as.numeric(x), class=as.factor(class)))
-
-library("ggplot2")
-p <- ggplot(data, aes(x = x)) + 
-  geom_histogram(aes(x, ..density..), binwidth = 1, colour = "black", fill = "white") +
-  geom_vline(xintercept = m1, col = "red", size = 2) + 
-  geom_vline(xintercept = m2, col = "blue", size = 2)
-p
-
-set.seed(0)
-library(flexmix)
-
-mo1 <- FLXMRglm(family = "gaussian")
-mo2 <- FLXMRglm(family = "gaussian")
-flexfit <- flexmix(x ~ 1, data = data, k = 2, model = list(mo1, mo2))
-
-#So how did we do? It looks like we got class assignments perfectly
-
-print(table(clusters(flexfit), data$class))
 
 
 # rpack clustering

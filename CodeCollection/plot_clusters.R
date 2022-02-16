@@ -1,13 +1,13 @@
-plot_clusters = function (coords, weights, clusters, centers, title = "", subtitle = NULL, outgroup_label=99, outgroup_legend = "outgroup") 
+plot_cl = function (coords, weights, clusters, centers, title = "", subtitle = NULL, outgroup_label=99, outgroup_legend = "outgroup") 
 {
   
-  coords = test_dat[,1:2]
+  #coords = test_dat[,1:2]
   centers = as.matrix(centers)
   coords = as.matrix(coords)
   x = coords[, 1]
   y = coords[, 2]
   k = nrow(centers)
-  w = test_dat$w
+  w = weights
   centers = as.matrix(centers)
   help_clusters = clusters
   clusters = as.factor(clusters)
@@ -23,7 +23,7 @@ plot_clusters = function (coords, weights, clusters, centers, title = "", subtit
   plot = ggplot2::ggplot() + 
     ggplot2::geom_point(mapping = ggplot2::aes(x = x, y = y, size = w, 
                                                colour = cl_sizes)) + 
-    ggplot2::scale_size(range = c(2, 7), guide = FALSE) + 
+    ggplot2::scale_size(range = c(2, 7), guide = "none") + 
     ggplot2::scale_color_manual(values = c_col[1:(k+1)], name = "Cluster sizes:") +
     ggplot2::guides(color = ggplot2::guide_legend(override.aes = list(size = 5))) + 
     ggplot2::labs(x = "x", y = "y", title = NULL, subtitle = NULL) + 

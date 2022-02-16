@@ -1,3 +1,143 @@
+# Function to simulate N gamma mixtures with different cluster sizes and
+# different non-spatial attributes
+simulate_gamma_mixture_n <- function(N, n_total, k, ...){
+  
+  dat_N <- list()
+  plot_N <- list()
+  
+  for (i in 1:N) {
+    
+      # Simulate vector of cluster sizes such that 
+      # the total number of points is n_total
+      n <- simulate_cluster_sizes(n_total, k)
+      
+      # Simulate one gamma mixture
+      dat_N[[i]] <- simulate_gamma_mixture(n = n, k = k,...) 
+      
+      # Create non-spatial attributes
+      dat_N[[i]] <- simulate_nonspat_attributes(dat_N[[i]])
+  }
+  
+  return(dat_N)
+}
+
+
+# Simulate normal distribution with different parameters
+# for each non-spatial group
+simulate_group_normal <- function(x){
+  
+  # Parameters for each group 
+  # (4 groups each with mu vector and Sigma matrix)
+  params <- tribble(
+    ~group, ~mu, ~Sigma,
+    1, c(1, 5, 7), diag(c(1,2,2)),
+    2, c(4, 5, 6), diag(c(1,0.5,1)),
+    3, c(8, 4, 1), diag(c(2,2,2)),
+    4, c(5, 7, 3), diag(c(1,1,2)),
+  )
+  
+  # Generate random sample of 100 observation for each category
+  values <- apply(as.matrix(x), 1, function(x) {
+    switch(
+      x,
+      "1" =
+        mvrnorm(1, params[1,]$mu[[1]], params[1,]$Sigma[[1]]),
+      "2" =
+        mvrnorm(1, params[2,]$mu[[1]], params[2,]$Sigma[[1]]),
+      "3" =
+        mvrnorm(1, params[3,]$mu[[1]], params[3,]$Sigma[[1]]),
+      "4" =
+        mvrnorm(1, params[4,]$mu[[1]], params[4,]$Sigma[[1]]),
+      rep(9999, 3)
+    )
+  })
+  
+  
+  #return(values)
+  return(data.frame(par1 = values[1,],
+                    par2 = values[2,],
+                    par3 = values[3,]))
+}
+
+# Simulate multinomial distribution with different probability parameters
+# for each non-spatial group
+simulate_group_multinomial <- function(x){
+  
+  # Probabilities for each group (4 groups each with 3 parameters)
+  probs <- tibble(
+    group1 = c(0.05, 0.55, 0.4),
+    group2 = c(0.33, 0.34, 0.33),
+    group3 = c(0.15, 0.15, 0.7),
+    group4 = c(0.40, 0.50, 0.10)
+  )
+  
+  # Generate random sample of 100 observation for each category
+  values <- apply(as.matrix(x), 1, function(x) {
+    switch(
+      x,
+      "1" =
+        rmultinom(1, 100, probs$group1) |> t(),
+      "2" =
+        rmultinom(1, 100, probs$group2) |> t(),
+      "3" =
+        rmultinom(1, 100, probs$group3) |> t(),
+      "4" =
+        rmultinom(1, 100, probs$group4) |> t(),
+      rep(9999, 3)
+    )
+  })
+  
+  return(data.frame(par1 = values[1,],
+                    par2 = values[2,],
+                    par3 = values[3,]))
+}
+
+# Function to create non-spatial attribute groups for the data set and
+# simulating n variables for each point
+simulate_nonspat_attributes <- function(dat, nonspat_dist = "normal"){
+  
+  # Divide the data randomly to four sections
+  div_x <- runif(1, 0.2, 0.8)
+  div_y <- runif(1, 0.2, 0.8)
+  
+  dat$div <- c(x = div_x, y = div_y)
+  
+  dat$Y <- dat$Y |> 
+    # Create a variable to describe the section
+    dplyr::mutate(non_spat_group = if_else(x < div_x,
+                                    true = if_else(y > div_y, "1", "3"),
+                                    false = if_else(y > div_y, "2", "4")))
+  
+  
+  if(nonspat_dist == "multinomial"){
+    # Simulate variables from multinomial distribution
+    dat$Y <- dat$Y |>
+      mutate(simulate_group_multinomial(non_spat_group))
+  } else if(nonspat_dist == "normal"){
+    # Simulate variables from normal distribution
+    dat$Y <- dat$Y |>
+      mutate(simulate_group_normal(non_spat_group))
+  } else {
+    stop("Choose an available distribution for non-spatial attributes!")
+  }
+  
+  
+  
+  
+  return(dat)
+}
+
+# Function to simulate cluster sizes based on the total number of points
+# and categorical distribution
+simulate_cluster_sizes <- function(n_total, k, probs = rep(1/k, k)){
+  
+  tibble(x = rcat(n_total, probs)) |> 
+    group_by(x) |> 
+    dplyr::summarise(count = n()) |> 
+    pull(count)
+  
+}
+
 #' simulate_gamma_mixture
 #'
 #' Generate data points from multivariate gamma distributions.
@@ -128,6 +268,7 @@ simulate_gamma_mixture <- function(n, k, w_dist_params = c(1, 100), w_dist = "un
       
       w <- sort(w)
       
+      #print(w)
       Y$w[Y$orig_group == i] <- w
       
       e_dist <- function(x) sqrt(sum((x - mu[i, ])^2))
@@ -221,6 +362,10 @@ simulate_gamma_mixture <- function(n, k, w_dist_params = c(1, 100), w_dist = "un
     Y$y <- (scale_between_range[2] - scale_between_range[1])*((Y$y - min(Y$y))/(max(Y$y) - min(Y$y))) + scale_between_range[1]
      
   }  
+  
+  # Add column to identify outliers easily
+  Y <- Y |> 
+    mutate(is_outlier = if_else(orig_group == k + 1, TRUE, FALSE))
   
   return(list(Y = Y, mu_true = mu))
   

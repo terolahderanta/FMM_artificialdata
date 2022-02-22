@@ -32,6 +32,7 @@ library(targets)
 library(MASS)
 library(conflicted)
 library(scales)
+library(progress)
 conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 ```
@@ -47,6 +48,8 @@ source("functions_summary.R")
 
 # Get the colors for plotting
 c_col <- get_cols() 
+
+colpal <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 ```
 
 # Evaluation with simulated data
@@ -80,6 +83,11 @@ plot_division_example(dat)
 # ggsave(filename = "images/plot_division_example.png",
 #        width = 5,
 #        height = 5)
+
+dat$Y |> 
+  ggplot(mapping = aes(x = x, y = y)) +
+  geom_point(aes(color = non_spat_group))
+
 ```
 
 Visualize the distribution of non-spatial attributes in each section.
@@ -146,6 +154,8 @@ dat$Y |>
       axis.ticks = ggplot2::element_blank()
     )+
     coord_fixed(ratio = 1)
+
+# TODO: Tsekkaa meneekö värit oikein
 
 # ggsave(filename = "images/plot_nonspat_distribution2.png",
 #        width = 5,
@@ -243,8 +253,242 @@ plot_clust4 <- plot_clust_list(
 plot_clust4
 ```
 
-```{r, eval = FALSE}
+```{r}
 clust_names <- paste("lambda=", seq(0.1, 1, by = 0.1), sep="")
+
+proximity_summary_table1 <- proximity_summary_list(clust_list = clust1,
+                       dat_list = list_dat100,
+                       clust_names = clust_names
+                       )
+
+duration_summary_table1 <- duration_summary_list(clust_list = clust1,
+                       dat_list = list_dat100,
+                       clust_names = clust_names
+                       )
+
+proximity_summary_table1 <- proximity_summary_table1 |>
+  select(name, Mean) |> 
+  group_by(name) |> 
+  summarise(Mean = mean(Mean))
+
+duration_summary_table1 <- duration_summary_table1 |>
+  select(name, Mean) |> 
+  group_by(name) |> 
+  summarise(Mean = mean(Mean))
+
+# Combined table
+full_summary1 <- duration_summary_table1 |> 
+  mutate(par = str_sub(name, 1,4), .after = 1) |> 
+  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
+  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
+  full_join(proximity_summary_table1, by = "name")
+
+scale_coeff <- 18
+
+# full_summary |> 
+#   pivot_longer(cols = c("mean_sd_par1","mean_sd_par2","mean_sd_par3"), 
+#                names_to = "mean_sd_par", values_to = "which_par")
+
+clust1_summary <- 
+full_summary1 |> 
+  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
+         .after = 1) |> 
+  ggplot(aes(x = lambda_d)) +
+  geom_line(aes(y = mean_sd_par1 * scale_coeff), color = "#F8766D", size = 2) +
+  geom_line(aes(y = mean_sd_par2 * scale_coeff), color = "#7CAE00", size = 2) +
+  geom_line(aes(y = mean_sd_par3 * scale_coeff), color = "#00BFC4", size = 2) +
+  geom_line(aes(y = Mean), size = 2) +
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Mean distance",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
+  ) +
+  scale_x_continuous(name = expression(lambda[d]),
+                     breaks = seq(0.1, 1.0, 0.1)) +
+  theme_bw() 
+# 
+# ggsave(filename = "images/plot_clust_summary.png",
+#        width = 6,
+#        height = 3)
+
+```
+
+```{r}
+clust_names <- paste("lambda=", seq(0.1, 1, by = 0.1), sep="")
+
+proximity_summary_table2 <- proximity_summary_list(clust_list = clust2,
+                       dat_list = list_dat100,
+                       clust_names = clust_names
+                       )
+
+duration_summary_table2 <- duration_summary_list(clust_list = clust2,
+                       dat_list = list_dat100,
+                       clust_names = clust_names
+                       )
+
+proximity_summary_table2 <- proximity_summary_table2 |>
+  select(name, Mean) |> 
+  group_by(name) |> 
+  summarise(Mean = mean(Mean))
+
+duration_summary_table2 <- duration_summary_table2 |>
+  select(name, Mean) |> 
+  group_by(name) |> 
+  summarise(Mean = mean(Mean))
+
+# Combined table
+full_summary2 <- duration_summary_table2 |> 
+  mutate(par = str_sub(name, 1,4), .after = 1) |> 
+  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
+  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
+  full_join(proximity_summary_table2, by = "name")
+
+scale_coeff <- 18
+
+# full_summary |> 
+#   pivot_longer(cols = c("mean_sd_par1","mean_sd_par2","mean_sd_par3"), 
+#                names_to = "mean_sd_par", values_to = "which_par")
+
+clust2_summary <- 
+full_summary2 |> 
+  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
+         .after = 1) |> 
+  ggplot(aes(x = lambda_d)) +
+  geom_line(aes(y = mean_sd_par1 * scale_coeff), color = "#F8766D", size = 2) +
+  geom_line(aes(y = mean_sd_par2 * scale_coeff), color = "#7CAE00", size = 2) +
+  geom_line(aes(y = mean_sd_par3 * scale_coeff), color = "#00BFC4", size = 2) +
+  geom_line(aes(y = Mean), size = 2) +
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Mean distance",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
+  ) +
+  scale_x_continuous(name = expression(lambda[d]),
+                     breaks = seq(0.1, 1.0, 0.1)) +
+  theme_bw() 
+
+# ggsave(filename = "images/plot_clust_summary.png",
+#        width = 6,
+#        height = 3)
+
+```
+
+
+```{r}
+clust_names <- paste("lambda=", seq(0.1, 1, by = 0.1), sep="")
+
+proximity_summary_table3 <- proximity_summary_list(clust_list = clust3,
+                       dat_list = list_dat100,
+                       clust_names = clust_names
+                       )
+
+duration_summary_table3 <- duration_summary_list(clust_list = clust3,
+                       dat_list = list_dat100,
+                       clust_names = clust_names
+                       )
+
+proximity_summary_table3 <- proximity_summary_table3 |>
+  select(name, Mean) |> 
+  group_by(name) |> 
+  summarise(Mean = mean(Mean))
+
+duration_summary_table3 <- duration_summary_table3 |>
+  select(name, Mean) |> 
+  group_by(name) |> 
+  summarise(Mean = mean(Mean))
+
+# Combined table
+full_summary3 <- duration_summary_table3 |> 
+  mutate(par = str_sub(name, 1,4), .after = 1) |> 
+  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
+  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
+  full_join(proximity_summary_table3, by = "name")
+
+scale_coeff <- 18
+
+# full_summary |> 
+#   pivot_longer(cols = c("mean_sd_par1","mean_sd_par2","mean_sd_par3"), 
+#                names_to = "mean_sd_par", values_to = "which_par")
+
+clust3_summary <- 
+full_summary3 |> 
+  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
+         .after = 1) |> 
+  ggplot(aes(x = lambda_d)) +
+  geom_line(aes(y = mean_sd_par1 * scale_coeff), color = "#F8766D", size = 2) +
+  geom_line(aes(y = mean_sd_par2 * scale_coeff), color = "#7CAE00", size = 2) +
+  geom_line(aes(y = mean_sd_par3 * scale_coeff), color = "#00BFC4", size = 2) +
+  geom_line(aes(y = Mean), size = 2) +
+  scale_y_continuous(
+    
+    # Features of the first axis
+    name = "Mean distance",
+    
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
+  ) +
+  scale_x_continuous(name = expression(lambda[d]),
+                     breaks = seq(0.1, 1.0, 0.1)) +
+  theme_bw() 
+clust3_summary
+
+plot_summary_lines <- function(summary_table, scale_coeff = 18){
+  
+  summary_table |>
+    mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
+           .after = 1) |>
+    select(-name) |>
+    mutate(mean_sd_par1 = scale_coeff * mean_sd_par1,
+           mean_sd_par2 = scale_coeff * mean_sd_par2,
+           mean_sd_par3 = scale_coeff * mean_sd_par3) |> 
+    pivot_longer(cols = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"),
+                 names_to = "par") |> 
+    ggplot(aes(x = lambda_d)) +
+    geom_line(aes(y = value, color = par |> factor(levels = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"))), size = 2) +
+    scale_color_manual(name = "Summary statistic",values = c("#F8766D","#7CAE00", "#00BFC4","black"),labels = c("Par 1: Average S.D.", "Par 2: Average S.D.", "Par 3: Average S.D.", "Mean distance"))+
+    scale_y_continuous(
+    # Features of the first axis
+    name = "Mean distance",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
+  ) +
+  scale_x_continuous(name = expression(lambda[d]),
+                     breaks = seq(0.1, 1.0, 0.1)) +
+  theme_bw()
+}
+
+plot_summary_lines(full_summary3)
+
+# ggsave(filename = "images/plot_clust_summary.png",
+#        width = 6,
+#        height = 3)
+
+```
+
+```{r}
+(plot_summary_lines(full_summary1)+ ggtitle("No outliers")) /
+(plot_summary_lines(full_summary2) + ggtitle(expression(lambda[o]*" = 0.1"))) /
+(plot_summary_lines(full_summary3) + ggtitle(expression(lambda[o]*" = 0.05"))) +
+  patchwork::plot_layout(guides = "collect")
+
+ggsave(filename = "images/plot_clust_summary.png",
+       width = 6,
+       height = 9)
+
+# Attr. 1
+
+```
+
+
+
+```{r, eval = FALSE}
+
 
 clust1_proximity_summary <-
   proximity_summary(clust_list = clust1[[1]][-1],
@@ -261,15 +505,28 @@ clust1_duration_summary = duration_sd_summary(
 
 
 # Combined table
-clust1_duration_summary |> 
+clust1_summary <- clust1_duration_summary |> 
   select(name, Mean) |> 
   mutate(par = str_sub(name, 1,4), .after = 1) |> 
   mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
   pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
   full_join(clust1_proximity_summary, by = "name") |> 
-  select(-S.D., -Min, -Max, -`100%`,-`  0%`) |> 
+  select(-S.D., -Min, -Max, -`100%`,-`  0%`)
+  
+clust1_summary |>   
   xtable::xtable() |> 
   print(include.rownames = FALSE)
+
+temp <- clust1_summary |> pull(name)
+
+str_detect(temp, "[:digit:]")
+str_extract(temp, "([:digit:]|[:punct:])+")
+
+clust1_summary |> 
+  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
+         .after = 1) |> 
+  ggplot() +
+  geom_line(aes(x = lambda_d, y = mean_sd_par1))
 
 ```
 

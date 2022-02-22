@@ -88,6 +88,62 @@ table_proximity_summary <- function(data, cl_obj, dig = 2, probs = c(0, 0.25, 0.
   return(res)
 }
 
+duration_summary_list <- function(clust_list, dat_list, clust_names){
+  
+  n_data <- length(clust_list)
+  
+  pb <- progress_bar$new(format = "[:bar] :percent eta: :eta (:elapsedfull)",
+                         total = n_data, clear = FALSE)
+  pb$tick(0)
+  
+  ret_table <- duration_sd_summary(clust_list = clust_list[[1]][-1],
+                                 names = clust_names,
+                                 dat = dat_list[[1]]$Y)
+  pb$tick()
+  
+  for(i in 2:n_data){
+    ret_table <- bind_rows(ret_table, 
+                           duration_sd_summary(clust_list = clust_list[[i]][-1],
+                                             names = clust_names,
+                                             dat = dat_list[[i]]$Y))
+    pb$tick()
+  }
+  
+  return(ret_table)
+  
+  # 
+  # clust1_duration_summary = duration_sd_summary(
+  #   clust_list = clust1[[1]][-1],
+  #   names = clust_names,
+  #   dat = list_dat100[[1]]$Y
+  # )
+}
+
+proximity_summary_list <- function(clust_list, dat_list, clust_names){
+  
+  n_data <- length(clust_list)
+  
+  pb <- progress_bar$new(format = "[:bar] :percent eta: :eta (:elapsedfull)",
+                         total = n_data, clear = FALSE)
+  pb$tick(0)
+  
+  ret_table <- proximity_summary(clust_list = clust_list[[1]][-1],
+                                 names = clust_names,
+                                 dat = dat_list[[1]]$Y)
+  pb$tick()
+  
+  for(i in 2:n_data){
+    ret_table <- bind_rows(ret_table, 
+                           proximity_summary(clust_list = clust_list[[i]][-1],
+                                             names = clust_names,
+                                             dat = dat_list[[i]]$Y))
+    pb$tick()
+  }
+  
+  return(ret_table)
+    
+}
+
 # Create a proximity summary table for clusterings
 proximity_summary <- function(clust_list, names, dat, probs = c(0, 0.25, 0.5, 0.75, 1)){
   summ_table <- table_proximity_summary(data = dat,

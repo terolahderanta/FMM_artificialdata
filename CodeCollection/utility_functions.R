@@ -280,12 +280,8 @@ plot_division_example <- function(dat){
   plot_sim <- ggplot() +
     geom_point(data = dat$Y, aes(x = x, y = y, size = w, label = id)) +
     scale_size(range = c(2, 6)) +  # Scale objects sizes
-    guides(
-      color = guide_legend(        # Point size in legend
-        override.aes = list(size=5)
-      )
-    ) +
-    labs(x = "x", y = "y", title = "Unclustered data") +
+    labs(x = "x", y = "y") +
+    theme_bw() +
     theme(
       legend.position = "right",            # Legend position and removing ticks from axis
       axis.text.x = ggplot2::element_blank(),
@@ -304,7 +300,6 @@ plot_division_example <- function(dat){
                                 label = round(c(div_x, div_y), 2)),
                size = 4) +
     guides(color = "none",
-           size = "none")+
-    ggtitle("") +
+           size = "none") +
     coord_fixed(ratio = 1)
 }

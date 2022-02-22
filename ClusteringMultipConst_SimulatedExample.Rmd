@@ -104,13 +104,14 @@ params <- tribble(
 dat$Y |> 
   pivot_longer(cols = c("par1", "par2", "par3"),
                names_to = "non_spat_par") |>
-  mutate(non_spat_group = paste("Section", non_spat_group)) |> 
+  mutate(non_spat_group = paste("Region", non_spat_group)) |> 
   ggplot()+
   geom_boxplot(aes(y = value, 
                    #x = non_spat_group,
                    color = non_spat_par)) +
   facet_grid(cols = vars(non_spat_group)) +
   guides(color=guide_legend(title="Non-spatial attribute:")) +
+  scale_color_discrete(labels = c("Red", "Green", "Blue")) + 
   theme_bw() +
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
@@ -138,15 +139,22 @@ plot_point_gradient(dat$Y,
 ```
 
 ```{r}
-dat$Y |> 
-  mutate(r_par1 = rescale(par1, c(0,1)),
-         g_par2 = rescale(par2, c(0,1)),
-         b_par3 = rescale(par3, c(0,1))) |> 
+plot_rgb <- dat$Y |> 
+  mutate(r_par1 = rescale(par1, c(0,255)) |> round(),
+         g_par2 = rescale(par2, c(0,255)) |> round(),
+         b_par3 = rescale(par3, c(0,255)) |> round()) |> 
+  mutate(color = rgb(red = r_par1, green = g_par2, blue = b_par3, 
+                     maxColorValue = 255)) |> 
   ggplot() +
-  geom_point(aes(x = x, y = y, color = rgb(r_par1, g_par2, b_par3), size = w)) +
+  geom_point(aes(x = x, y = y, 
+                 size = w, 
+                 color = color, 
+                 label0 = non_spat_group, label1 = r_par1, label2 = g_par2, label3 = b_par3)) +
+  scale_color_identity() +
   scale_size(range = c(2, 6)) +
   guides(size = "none", color = "none") +
     labs(x = "x", y = "y") +
+  theme_bw() +
     theme(
       legend.position = "right",
       axis.text.x = ggplot2::element_blank(),
@@ -155,7 +163,9 @@ dat$Y |>
     )+
     coord_fixed(ratio = 1)
 
-# TODO: Tsekkaa meneekö värit oikein
+#ggplotly(plot_rgb, tooltip = c("non_spat_group", "r_par1", "g_par2", "b_par3", "color"))
+
+plot_rgb
 
 # ggsave(filename = "images/plot_nonspat_distribution2.png",
 #        width = 5,
@@ -451,7 +461,7 @@ plot_summary_lines <- function(summary_table, scale_coeff = 18){
                  names_to = "par") |> 
     ggplot(aes(x = lambda_d)) +
     geom_line(aes(y = value, color = par |> factor(levels = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"))), size = 2) +
-    scale_color_manual(name = "Summary statistic",values = c("#F8766D","#7CAE00", "#00BFC4","black"),labels = c("Par 1: Average S.D.", "Par 2: Average S.D.", "Par 3: Average S.D.", "Mean distance"))+
+    scale_color_manual(name = "Summary statistic",values = c("#F8766D","#7CAE00", "#00BFC4","black"),labels = c("Red: Average S.D.", "Green: Average S.D.", "Blue: Average S.D.", "Mean distance"))+
     scale_y_continuous(
     # Features of the first axis
     name = "Mean distance",

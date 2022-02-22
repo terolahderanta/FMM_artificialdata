@@ -297,7 +297,7 @@ plot_division_example <- function(dat){
     geom_hline(data = NULL, yintercept = div_y, color = "red") +
     geom_vline(data = NULL, xintercept = div_x, color = "red") +
     geom_label(data = dat_division, 
-               aes(x = x, y = y, label = label, color = label),
+               aes(x = x, y = y, label = label),
                size = 10) +
     geom_label(data = NULL, aes(x = c(div_x, 0.025 ),
                                 y = c(0, div_y),

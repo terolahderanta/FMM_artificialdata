@@ -37,7 +37,7 @@ list(
   tar_target(
     list_dat100,
     simulate_gamma_mixture_n(
-      N = 4,
+      N = 10,
       n_total = 500,
       k = 10,
       n_out = 20,
@@ -62,7 +62,7 @@ list(
       lambda_par = lambda_par,
       lambda = NULL,
       k = 10,
-      N = 10,
+      N = 20,
       range = range,
       d = hav.dist2_par
     )
@@ -74,7 +74,7 @@ list(
       lambda_par = lambda_par,
       lambda = 0.01,
       k = 10,
-      N = 10,
+      N = 20,
       range = range,
       d = hav.dist2_par
       
@@ -85,9 +85,9 @@ list(
     clust_with_params_list(
       dat_list = list_dat100,
       lambda_par = lambda_par,
-      lambda = 0.0000000001,
+      lambda = 0.005,
       k = 10,
-      N = 10,
+      N = 20,
       range = range,
       d = hav.dist2_par
     )
@@ -97,9 +97,9 @@ list(
     clust_with_params_list(
       dat_list = list_dat100,
       lambda_par = lambda_par,
-      lambda = 0.5,
+      lambda = 0.001,
       k = 10,
-      N = 10,
+      N = 20,
       range = range,
       d = hav.dist2_par
     )
@@ -109,9 +109,9 @@ list(
     clust_with_params_list(
       dat_list = list_dat100,
       lambda_par = lambda_par,
-      lambda = 0.9,
+      lambda = 0.0001,
       k = 10,
-      N = 10,
+      N = 20,
       range = range,
       d = hav.dist2_par
     )

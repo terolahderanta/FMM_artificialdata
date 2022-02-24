@@ -80,9 +80,9 @@ dat <- create_data_example(seed = 329689)
 
 # Plot the example data 
 plot_division_example(dat)
-# ggsave(filename = "images/plot_division_example.png",
-#        width = 5,
-#        height = 5)
+ggsave(filename = "images/plot_division_example.png",
+       width = 5,
+       height = 5)
 
 dat$Y |> 
   ggplot(mapping = aes(x = x, y = y)) +
@@ -153,15 +153,9 @@ plot_rgb <- dat$Y |>
   scale_color_identity() +
   scale_size(range = c(2, 6)) +
   guides(size = "none", color = "none") +
-    labs(x = "x", y = "y") +
+  labs(x = "x", y = "y") +
   theme_bw() +
-    theme(
-      legend.position = "right",
-      axis.text.x = ggplot2::element_blank(),
-      axis.text.y = ggplot2::element_blank(),
-      axis.ticks = ggplot2::element_blank()
-    )+
-    coord_fixed(ratio = 1)
+  coord_fixed(ratio = 1)
 
 #ggplotly(plot_rgb, tooltip = c("non_spat_group", "r_par1", "g_par2", "b_par3", "color"))
 

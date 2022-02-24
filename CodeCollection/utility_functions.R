@@ -220,7 +220,7 @@ plot_clust_list <- function(list_dat, list_clust, data_id = 1){
   #   
   
   
-    clust_id <- c(3,5,7,9)
+    clust_id <- c(2,5,8,11)
     
     plot_clusters(
       coords = list_dat[[1]]$Y |> dplyr::select(x,y),
@@ -278,16 +278,10 @@ plot_division_example <- function(dat){
                          label = c("1", "2", "3", "4"))
   
   plot_sim <- ggplot() +
-    geom_point(data = dat$Y, aes(x = x, y = y, size = w, label = id)) +
+    geom_point(data = dat$Y, aes(x = x, y = y, size = w)) +
     scale_size(range = c(2, 6)) +  # Scale objects sizes
     labs(x = "x", y = "y") +
-    theme_bw() +
-    theme(
-      legend.position = "right",            # Legend position and removing ticks from axis
-      axis.text.x = ggplot2::element_blank(),
-      axis.text.y = ggplot2::element_blank(),
-      axis.ticks = ggplot2::element_blank()
-    )
+    theme_bw()
   
   plot_sim + 
     geom_hline(data = NULL, yintercept = div_y, color = "red") +

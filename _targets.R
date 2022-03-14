@@ -62,7 +62,7 @@ list(
       lambda_par = lambda_par,
       lambda = NULL,
       k = 10,
-      N = 20,
+      N = 10,
       range = range,
       d = hav.dist2_par
     )
@@ -72,9 +72,9 @@ list(
     clust_with_params_list(
       dat_list = list_dat100,
       lambda_par = lambda_par,
-      lambda = 0.01,
+      lambda = 0.2,
       k = 10,
-      N = 20,
+      N = 10,
       range = range,
       d = hav.dist2_par
       
@@ -85,37 +85,37 @@ list(
     clust_with_params_list(
       dat_list = list_dat100,
       lambda_par = lambda_par,
-      lambda = 0.005,
+      lambda = 0.1,
       k = 10,
-      N = 20,
+      N = 10,
       range = range,
       d = hav.dist2_par
-    )
-  ),
-  tar_target(
-    clust4,
-    clust_with_params_list(
-      dat_list = list_dat100,
-      lambda_par = lambda_par,
-      lambda = 0.001,
-      k = 10,
-      N = 20,
-      range = range,
-      d = hav.dist2_par
-    )
-  ),
-  tar_target(
-    clust5,
-    clust_with_params_list(
-      dat_list = list_dat100,
-      lambda_par = lambda_par,
-      lambda = 0.0001,
-      k = 10,
-      N = 20,
-      range = range,
-      d = hav.dist2_par
-    )
-  )
+    ))
+  # ),
+  # tar_target(
+  #   clust4,
+  #   clust_with_params_list(
+  #     dat_list = list_dat100,
+  #     lambda_par = lambda_par,
+  #     lambda = 0.001,
+  #     k = 10,
+  #     N = 10,
+  #     range = range,
+  #     d = hav.dist2_par
+  #   )
+  # ),
+  # tar_target(
+  #   clust5,
+  #   clust_with_params_list(
+  #     dat_list = list_dat100,
+  #     lambda_par = lambda_par,
+  #     lambda = 0.0001,
+  #     k = 10,
+  #     N = 10,
+  #     range = range,
+  #     d = hav.dist2_par
+  #   )
+  # )
   
   
 )

@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-First, load the necessary libraries. In addition to the `rpack` package, we use `tidyverse` and `dplyr` for sample data manipulation and `ggplot2` for plotting.
+First, load the necessary libraries. 
 
 ```{r message=FALSE}
 #install.packages("lcmix", repos=c("http://R-Forge.R-project.org",
@@ -18,28 +18,26 @@ library(rpack)
 library(tidyverse)
 library(LaplacesDemon)
 library(Matrix)
-library(plotly)
+#library(plotly)
 library(Gmedian)
 library(lcmix) # Added by Markku. Package can be found at R-Forge
 library(parallel) # For parallel computing. rpack uses function "detectCores".
-library(flexmix)
+#library(flexmix)
 library(patchwork)
 library(purrr)
 library(broman)
 #devtools::install_github("jamesotto852/ggdensity")
-library(ggdensity)
+#library(ggdensity)
 library(targets)
 library(MASS)
-library(conflicted)
 library(scales)
 library(progress)
-conflict_prefer("select", "dplyr")
-conflict_prefer("filter", "dplyr")
-```
+#devtools::install_github("cmartin/ggConvexHull")
+library(ggConvexHull)
+conflicted::conflict_prefer("select", "dplyr")
+conflicted::conflict_prefer("filter", "dplyr")
 
-These external functions generate data from gamma distribution. Weights are determined either by 1) chance 2 ) based on the distance from the distribution mean: the greater the Euclidean distance between the point and the population mean is, the larger the weight is. `simulate_unif_grid` is a sub-function of the main function `simulate_gamma_mixture`.
-
-```{r}
+# Load external functions
 source("CodeCollection/simulate_gamma_mixture.R")
 source("CodeCollection/simulate_unif_grid.R")
 source("CodeCollection/utility_functions.R")
@@ -47,10 +45,16 @@ source("functions_rpack.R")
 source("functions_summary.R")
 
 # Get the colors for plotting
-c_col <- get_cols() 
+colpal <- get_cols() 
 
-colpal <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+# Set ggplot theme
+theme_set(theme_bw())
+
+# Load targets
+tar_load(c("list_dat100", "clust1", "clust2", "clust3", "clust4"))
 ```
+
+These external functions generate data from gamma distribution. Weights are determined either by 1) chance 2 ) based on the distance from the distribution mean: the greater the Euclidean distance between the point and the population mean is, the larger the weight is. `simulate_unif_grid` is a sub-function of the main function `simulate_gamma_mixture`.
 
 # Evaluation with simulated data
 
@@ -70,27 +74,23 @@ Let's set up some data to be clustered.
 
 -   Different non-spatial attributes are added to the analysis
 
+### Single example data set
 
-Next, we create non-spatial attributes by dividing data points to four sections as shown below.
-
+Next, we create non-spatial attributes by dividing data points to four sections as shown with an example data set below.
 
 ```{r warning=FALSE}
-
+# Crete example data with set seed
 dat <- create_data_example(seed = 329689)
 
 # Plot the example data 
 plot_division_example(dat)
-ggsave(filename = "images/plot_division_example.png",
-       width = 5,
-       height = 5)
-
-dat$Y |> 
-  ggplot(mapping = aes(x = x, y = y)) +
-  geom_point(aes(color = non_spat_group))
-
+# ggsave(filename = "images/plot_division_example.png",
+#        width = 5,
+#        height = 5)
 ```
 
 Visualize the distribution of non-spatial attributes in each section.
+
 ```{r}
 # Parameters for the simulated distribution of non-spatial attributes
 params <- tribble(
@@ -101,6 +101,7 @@ params <- tribble(
     4, c(5, 7, 3), diag(c(1,1,2)),
   )
 
+# Plot the boxplots of each non-spatial parameter in each region
 dat$Y |> 
   pivot_longer(cols = c("par1", "par2", "par3"),
                names_to = "non_spat_par") |>
@@ -111,18 +112,19 @@ dat$Y |>
                    color = non_spat_par)) +
   facet_grid(cols = vars(non_spat_group)) +
   guides(color=guide_legend(title="Non-spatial attribute:")) +
-  scale_color_discrete(labels = c("Red", "Green", "Blue")) + 
+  scale_color_manual(labels = c("Red", "Green", "Blue"), values = 
+                       c("#F8766D","#7CAE00", "#00BFC4")) + 
   theme_bw() +
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         legend.position = "bottom")
-# ggsave(filename = "images/plot_nonspat_example.png",
-#        width = 6,
-#        height = 5)
+ggsave(filename = "images/plot_nonspat_example.png",
+       width = 6,
+       height = 3)
 ```
 
 ```{r}
-colpal <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+# Plot the non-spatial parameter distribution in three plots
 plot_point_gradient(dat$Y,
                     "par1",
                     colpal[1]) /
@@ -133,13 +135,14 @@ plot_point_gradient(dat$Y,
                       "par3",
                       colpal[3])
 
-# ggsave(filename = "images/plot_nonspat_distribution1.png",
+# ggsave(filename   = "images/plot_nonspat_distribution1.png",
 #        width = 4,
 #        height = 9)
 ```
 
 ```{r}
-plot_rgb <- dat$Y |> 
+# Plot RGB point plot for the non-spatial attributes 
+dat$Y |> 
   mutate(r_par1 = rescale(par1, c(0,255)) |> round(),
          g_par2 = rescale(par2, c(0,255)) |> round(),
          b_par3 = rescale(par3, c(0,255)) |> round()) |> 
@@ -148,114 +151,187 @@ plot_rgb <- dat$Y |>
   ggplot() +
   geom_point(aes(x = x, y = y, 
                  size = w, 
-                 color = color, 
-                 label0 = non_spat_group, label1 = r_par1, label2 = g_par2, label3 = b_par3)) +
+                 color = color)) +
   scale_color_identity() +
   scale_size(range = c(2, 6)) +
   guides(size = "none", color = "none") +
   labs(x = "x", y = "y") +
   theme_bw() +
   coord_fixed(ratio = 1)
-
-#ggplotly(plot_rgb, tooltip = c("non_spat_group", "r_par1", "g_par2", "b_par3", "color"))
-
-plot_rgb
-
 # ggsave(filename = "images/plot_nonspat_distribution2.png",
 #        width = 5,
 #        height = 5)
 
 ```
 
-Let's then simulate $N$ data sets from gamma mixture with different data points and non-spatial attributes. 
+Next, cluster the example data set into 10 clusters with rpack. We first set the clustering parameters.
 
 ```{r}
-# Simulate 4 data sets from gamma mixture
-tar_load(list_dat100)
+# Set range and lambda_o
+mean_dat <- round(sum(dat$Y |> pull(w) / 10))
+range <-  c((mean_dat - 10*100), (mean_dat + 10*100))
+lambda_par <- seq(0.1, 1, 0.1)
 ```
 
-Visualize the data sets:
+Cluster with varying $\lambda_o$ and $\lambda_d$.
 
-```{r warning=FALSE}
-# Make plot from each list element
-plots_dat100 <- list_dat100 |> 
-  map(plot_nonspat_attributes) 
+```{r}
+N <- 50
 
-plot_pw <- 
-plots_dat100[[1]] + 
-  plots_dat100[[2]] + 
-  plots_dat100[[3]] + 
-  plots_dat100[[4]] + 
-  patchwork::plot_layout(guides = "collect")
+# clust_dat <-
+#   clust_with_params(
+#     coords = dat$Y |> dplyr::select(x, y),
+#     params = dat$Y |> dplyr::select(par1, par2, par3),
+#     weights = dat$Y |> pull(w),
+#     lambda_par = lambda_par, 
+#     lambda = NULL,
+#     k = 10,
+#     N = N,
+#     range = range
+#   )
+# 
+# clust_dat2 <-
+#   clust_with_params(
+#     coords = dat$Y |> dplyr::select(x, y),
+#     params = dat$Y |> dplyr::select(par1, par2, par3),
+#     weights = dat$Y |> pull(w),
+#     lambda_par = lambda_par, 
+#     lambda = 0.3,
+#     k = 10,
+#     N = N,
+#     range = range
+#   )
+# 
+# clust_dat3 <-
+#   clust_with_params(
+#     coords = dat$Y |> dplyr::select(x, y),
+#     params = dat$Y |> dplyr::select(par1, par2, par3),
+#     weights = dat$Y |> pull(w),
+#     lambda_par = lambda_par, 
+#     lambda = 0.25,
+#     k = 10,
+#     N = N,
+#     range = range
+#   )
+# 
+# clust_dat4 <-
+#   clust_with_params(
+#     coords = dat$Y |> dplyr::select(x, y),
+#     params = dat$Y |> dplyr::select(par1, par2, par3),
+#     weights = dat$Y |> pull(w),
+#     lambda_par = lambda_par, 
+#     lambda = 0.2,
+#     k = 10,
+#     N = N,
+#     range = range
+#   )
+# clust_dat5 <-
+#   clust_with_params(
+#     coords = dat$Y |> dplyr::select(x, y),
+#     params = dat$Y |> dplyr::select(par1, par2, par3),
+#     weights = dat$Y |> pull(w),
+#     lambda_par = lambda_par, 
+#     lambda = 0.15,
+#     k = 10,
+#     N = N,
+#     range = range
+#   )
+# 
+# clust_dat6 <-
+#   clust_with_params(
+#     coords = dat$Y |> dplyr::select(x, y),
+#     params = dat$Y |> dplyr::select(par1, par2, par3),
+#     weights = dat$Y |> pull(w),
+#     lambda_par = lambda_par, 
+#     lambda = 0.1,
+#     k = 10,
+#     N = N,
+#     range = range
+#   )
 
-plot_pw  
+
+# save(clust_dat, file= "temp_files\\clust_dat.Rdata")
+# save(clust_dat2, file= "temp_files\\clust_dat2.Rdata")
+# save(clust_dat3, file= "temp_files\\clust_dat3.Rdata")
+# save(clust_dat4, file= "temp_files\\clust_dat4.Rdata")
+# save(clust_dat5, file= "temp_files\\clust_dat5.Rdata")
+# save(clust_dat6, file= "temp_files\\clust_dat6.Rdata")
+load("~/R-projects/FMM_artificialdata/temp_files/clust_dat.Rdata")
+load("~/R-projects/FMM_artificialdata/temp_files/clust_dat2.Rdata")
+load("~/R-projects/FMM_artificialdata/temp_files/clust_dat3.Rdata")
+load("~/R-projects/FMM_artificialdata/temp_files/clust_dat4.Rdata")
+load("~/R-projects/FMM_artificialdata/temp_files/clust_dat5.Rdata")
+load("~/R-projects/FMM_artificialdata/temp_files/clust_dat6.Rdata")
+
 ```
+
+Plot all the summary plots.
+
+```{r}
+clust_names <- paste("lambda=", seq(0.1, 1, by = 0.1), sep="")
+
+full_summary_dat <- full_summary(clust_dat, clust_names)
+full_summary_dat2 <- full_summary(clust_dat2, clust_names)
+full_summary_dat3 <- full_summary(clust_dat3, clust_names)
+full_summary_dat4 <- full_summary(clust_dat4, clust_names)
+full_summary_dat5 <- full_summary(clust_dat5, clust_names)
+full_summary_dat6 <- full_summary(clust_dat6, clust_names)
+
+
+
+plot_summary_lines(full_summary_dat, scale_coeff = 0.118) +
+  plot_summary_lines(full_summary_dat2, scale_coeff = 0.118) +
+  plot_summary_lines(full_summary_dat3, scale_coeff = 0.118) +
+  plot_summary_lines(full_summary_dat4, scale_coeff = 0.118) +
+  plot_summary_lines(full_summary_dat5, scale_coeff = 0.118) +
+  plot_summary_lines(full_summary_dat6, scale_coeff = 0.118) +
+plot_layout(guides = "collect", ncol = 2 ) & theme(legend.position = 'bottom')
+```
+
+```{r}
+plot_summary_lines(full_summary_dat |> 
+                     mutate(mean_sd_par3 = mean_sd_par3^2), scale_coeff = 0.118)
+```
+
+
+```{r}
+(plot_summary_lines(full_summary_dat, 0.118) + ggtitle(expression(lambda[o]*" = 1"~(No~outliers)))) /   
+  (plot_summary_lines(full_summary_dat4, 0.118) + ggtitle(expression(lambda[o]*" = 0.2"))) /
+  (plot_summary_lines(full_summary_dat6, 0.118) + ggtitle(expression(lambda[o]*" = 0.1"))) +
+  plot_layout(guides = "collect", ncol = 1) & 
+  theme(legend.position = 'bottom') & 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
+
+ggsave(filename = "images/singleclust_summary.png",
+       width = 6,
+       height = 9)
+```
+
+
+
+Plot some of the clusterings.
+
+```{r}
+(plot_cl_facet(clust_dat[-1], dat, c(2,6,10)) + ggtitle(expression(lambda[o]*" = 1"~(No~outliers)))) /  
+(plot_cl_facet(clust_dat4[-1], dat, c(2,6,10))+ ggtitle(expression(lambda[o]*" = 0.2"))) /
+(plot_cl_facet(clust_dat6[-1], dat, c(2,6,10))+ ggtitle(expression(lambda[o]*" = 0.1"))) +
+  plot_layout(guides = "collect", ncol = 1)
+
+ggsave(filename = "images/singleclust_plots.png",
+       width = 6,
+       height = 8)
+```
+
+
+### Summary of 100 data sets
+
+Let's then simulate $N$ data sets from gamma mixture with different data points and non-spatial attributes.
 
 To generate non-spatial attributes, we simulate one value from 3D multinormal distribution. Each non-spatial group has different parameters for the normal distribution. 
-
-```{r}
-plot_pars <- list_dat100[[1]]$Y |> 
-    ggplot() +
-    geom_point(aes(x = x, 
-                   y = y, 
-                   #size = w, 
-                   color = orig_group,
-                   fill = orig_group,
-                   shape = is_outlier,
-                   label = par1,
-                   label2 = par2,
-                   label3 = par3), 
-               size = 3,
-               stroke = 1.5) +
-    geom_vline(xintercept = list_dat100[[1]]$div[1]) + 
-    geom_hline(yintercept = list_dat100[[1]]$div[2]) + 
-    guides(size = "none", fill = "none") +
-    scale_color_discrete(name = "Original clusters") +
-    scale_shape_manual(values = c(21,4)) +
-    guides(colour = guide_legend(override.aes = list(size=5)),
-           shape = "none")
-
-ggplotly(plot_pars, tooltip = c("par1", "par2", "par3"))
-```
 
 
 ## Clustering
 
-```{r}
-tar_load(clust1)
-tar_load(clust2)
-tar_load(clust3)
-tar_load(clust4)
-
-##clust_dat4[[1]]
-plot_clust1 <- plot_clust_list(
-  list_dat100,
-  clust1
-)
-
-plot_clust1
-
-plot_clust2 <- plot_clust_list(
-  list_dat100,
-  clust2
-)
-
-plot_clust2
-
-plot_clust3 <- plot_clust_list(
-  list_dat100,
-  clust3
-)
-
-plot_clust3
-
-plot_clust4 <- plot_clust_list(
-  list_dat100,
-  clust4
-)
-
-plot_clust4
-```
 
 ```{r}
 clust_names <- paste("lambda=", seq(0.1, 1, by = 0.1), sep="")
@@ -286,37 +362,6 @@ full_summary1 <- duration_summary_table1 |>
   mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
   pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
   full_join(proximity_summary_table1, by = "name")
-
-scale_coeff <- 18
-
-# full_summary |> 
-#   pivot_longer(cols = c("mean_sd_par1","mean_sd_par2","mean_sd_par3"), 
-#                names_to = "mean_sd_par", values_to = "which_par")
-
-clust1_summary <- 
-full_summary1 |> 
-  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
-         .after = 1) |> 
-  ggplot(aes(x = lambda_d)) +
-  geom_line(aes(y = mean_sd_par1 * scale_coeff), color = "#F8766D", size = 2) +
-  geom_line(aes(y = mean_sd_par2 * scale_coeff), color = "#7CAE00", size = 2) +
-  geom_line(aes(y = mean_sd_par3 * scale_coeff), color = "#00BFC4", size = 2) +
-  geom_line(aes(y = Mean), size = 2) +
-  scale_y_continuous(
-    
-    # Features of the first axis
-    name = "Mean distance",
-    
-    # Add a second axis and specify its features
-    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
-  ) +
-  scale_x_continuous(name = expression(lambda[d]),
-                     breaks = seq(0.1, 1.0, 0.1)) +
-  theme_bw() 
-# 
-# ggsave(filename = "images/plot_clust_summary.png",
-#        width = 6,
-#        height = 3)
 
 ```
 
@@ -349,38 +394,6 @@ full_summary2 <- duration_summary_table2 |>
   mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
   pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
   full_join(proximity_summary_table2, by = "name")
-
-scale_coeff <- 18
-
-# full_summary |> 
-#   pivot_longer(cols = c("mean_sd_par1","mean_sd_par2","mean_sd_par3"), 
-#                names_to = "mean_sd_par", values_to = "which_par")
-
-clust2_summary <- 
-full_summary2 |> 
-  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
-         .after = 1) |> 
-  ggplot(aes(x = lambda_d)) +
-  geom_line(aes(y = mean_sd_par1 * scale_coeff), color = "#F8766D", size = 2) +
-  geom_line(aes(y = mean_sd_par2 * scale_coeff), color = "#7CAE00", size = 2) +
-  geom_line(aes(y = mean_sd_par3 * scale_coeff), color = "#00BFC4", size = 2) +
-  geom_line(aes(y = Mean), size = 2) +
-  scale_y_continuous(
-    
-    # Features of the first axis
-    name = "Mean distance",
-    
-    # Add a second axis and specify its features
-    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
-  ) +
-  scale_x_continuous(name = expression(lambda[d]),
-                     breaks = seq(0.1, 1.0, 0.1)) +
-  theme_bw() 
-
-# ggsave(filename = "images/plot_clust_summary.png",
-#        width = 6,
-#        height = 3)
-
 ```
 
 
@@ -414,150 +427,20 @@ full_summary3 <- duration_summary_table3 |>
   pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
   full_join(proximity_summary_table3, by = "name")
 
-scale_coeff <- 18
-
-# full_summary |> 
-#   pivot_longer(cols = c("mean_sd_par1","mean_sd_par2","mean_sd_par3"), 
-#                names_to = "mean_sd_par", values_to = "which_par")
-
-clust3_summary <- 
-full_summary3 |> 
-  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
-         .after = 1) |> 
-  ggplot(aes(x = lambda_d)) +
-  geom_line(aes(y = mean_sd_par1 * scale_coeff), color = "#F8766D", size = 2) +
-  geom_line(aes(y = mean_sd_par2 * scale_coeff), color = "#7CAE00", size = 2) +
-  geom_line(aes(y = mean_sd_par3 * scale_coeff), color = "#00BFC4", size = 2) +
-  geom_line(aes(y = Mean), size = 2) +
-  scale_y_continuous(
-    
-    # Features of the first axis
-    name = "Mean distance",
-    
-    # Add a second axis and specify its features
-    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
-  ) +
-  scale_x_continuous(name = expression(lambda[d]),
-                     breaks = seq(0.1, 1.0, 0.1)) +
-  theme_bw() 
-clust3_summary
-
-plot_summary_lines <- function(summary_table, scale_coeff = 18){
-  
-  summary_table |>
-    mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
-           .after = 1) |>
-    select(-name) |>
-    mutate(mean_sd_par1 = scale_coeff * mean_sd_par1,
-           mean_sd_par2 = scale_coeff * mean_sd_par2,
-           mean_sd_par3 = scale_coeff * mean_sd_par3) |> 
-    pivot_longer(cols = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"),
-                 names_to = "par") |> 
-    ggplot(aes(x = lambda_d)) +
-    geom_line(aes(y = value, color = par |> factor(levels = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"))), size = 2) +
-    scale_color_manual(name = "Summary statistic",values = c("#F8766D","#7CAE00", "#00BFC4","black"),labels = c("Red: Average S.D.", "Green: Average S.D.", "Blue: Average S.D.", "Mean distance"))+
-    scale_y_continuous(
-    # Features of the first axis
-    name = "Mean distance",
-    # Add a second axis and specify its features
-    sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
-  ) +
-  scale_x_continuous(name = expression(lambda[d]),
-                     breaks = seq(0.1, 1.0, 0.1)) +
-  theme_bw()
-}
-
-plot_summary_lines(full_summary3)
-
-# ggsave(filename = "images/plot_clust_summary.png",
-#        width = 6,
-#        height = 3)
-
 ```
 
+Collect summary data into a single plot.
+
 ```{r}
-(plot_summary_lines(full_summary1)+ ggtitle("No outliers")) /
-(plot_summary_lines(full_summary2) + ggtitle(expression(lambda[o]*" = 0.1"))) /
-(plot_summary_lines(full_summary3) + ggtitle(expression(lambda[o]*" = 0.05"))) +
-  patchwork::plot_layout(guides = "collect")
+(plot_summary_lines(full_summary1, 0.118) + ggtitle(expression(lambda[o]*" = 1"~(No~outliers)))) /
+(plot_summary_lines(full_summary2, 0.118) + ggtitle(expression(lambda[o]*" = 0.1"))) /
+(plot_summary_lines(full_summary3, 0.118) + ggtitle(expression(lambda[o]*" = 0.05"))) +
+  patchwork::plot_layout(guides = "collect") & 
+  theme(legend.position = 'bottom') & 
+  guides(color = guide_legend(nrow = 2, byrow = TRUE))
 
 ggsave(filename = "images/plot_clust_summary.png",
        width = 6,
        height = 9)
-
-# Attr. 1
-
 ```
-
-
-
-```{r, eval = FALSE}
-
-
-clust1_proximity_summary <-
-  proximity_summary(clust_list = clust1[[1]][-1],
-                    names = clust_names,
-                    dat = list_dat100[[1]]$Y)
-
-clust1_proximity_summary
-
-clust1_duration_summary = duration_sd_summary(
-    clust_list = clust1[[1]][-1],
-    names = clust_names,
-    dat = list_dat100[[1]]$Y
-  )
-
-
-# Combined table
-clust1_summary <- clust1_duration_summary |> 
-  select(name, Mean) |> 
-  mutate(par = str_sub(name, 1,4), .after = 1) |> 
-  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
-  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
-  full_join(clust1_proximity_summary, by = "name") |> 
-  select(-S.D., -Min, -Max, -`100%`,-`  0%`)
-  
-clust1_summary |>   
-  xtable::xtable() |> 
-  print(include.rownames = FALSE)
-
-temp <- clust1_summary |> pull(name)
-
-str_detect(temp, "[:digit:]")
-str_extract(temp, "([:digit:]|[:punct:])+")
-
-clust1_summary |> 
-  mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
-         .after = 1) |> 
-  ggplot() +
-  geom_line(aes(x = lambda_d, y = mean_sd_par1))
-
-```
-
-```{r}
-clust2_proximity_summary <-
-  proximity_summary(clust_list = clust2[[1]][-1],
-                    names = clust_names,
-                    dat = list_dat100[[1]]$Y)
-
-
-clust2_duration_summary = duration_sd_summary(
-    clust_list = clust2[[1]][-1],
-    names = clust_names,
-    dat = list_dat100[[1]]$Y
-  )
-
-
-# Combined table
-clust2_duration_summary |> 
-  select(name, Mean) |> 
-  mutate(par = str_sub(name, 1,4), .after = 1) |> 
-  mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
-  pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
-  full_join(clust2_proximity_summary, by = "name") |> 
-  select(-S.D., -Min, -Max, -`100%`,-`  0%`) |> 
-  xtable::xtable() |> 
-  print(include.rownames = FALSE)
-```
-
 

@@ -1,5 +1,26 @@
-percentage_of_correct <- function(dat, clust){
+plot_summary_lines <- function(summary_table, scale_coeff = 18){
   
+  summary_table |>
+    mutate(lambda_d = str_extract(name, "([:digit:]|[:punct:])+") |> as.double(),
+           .after = 1) |>
+    select(-name) |>
+    mutate(mean_sd_par1 = scale_coeff * mean_sd_par1,
+           mean_sd_par2 = scale_coeff * mean_sd_par2,
+           mean_sd_par3 = scale_coeff * mean_sd_par3) |> 
+    pivot_longer(cols = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"),
+                 names_to = "par") |> 
+    ggplot(aes(x = lambda_d)) +
+    geom_line(aes(y = value, color = par |> factor(levels = c("mean_sd_par1", "mean_sd_par2", "mean_sd_par3", "Mean"))), size = 2) +
+    scale_color_manual(name = "Summary statistic",values = c("#F8766D","#7CAE00", "#00BFC4","black"),labels = c("Red: Average S.D.", "Green: Average S.D.", "Blue: Average S.D.", "Mean distance"))+
+    scale_y_continuous(
+      # Features of the first axis
+      name = "Distance",
+      # Add a second axis and specify its features
+      sec.axis = sec_axis(~./scale_coeff, name="Average S.D.")
+    ) +
+    scale_x_continuous(name = expression(lambda[d]),
+                       breaks = seq(0.1, 1.0, 0.1)) +
+    theme_bw()
 }
 
 
@@ -145,10 +166,11 @@ proximity_summary_list <- function(clust_list, dat_list, clust_names){
 }
 
 # Create a proximity summary table for clusterings
-proximity_summary <- function(clust_list, names, dat, probs = c(0, 0.25, 0.5, 0.75, 1)){
+proximity_summary <- function(clust_list, names, dat, probs = c(0, 0.25, 0.5, 0.75, 1), dig = 3){
   summ_table <- table_proximity_summary(data = dat,
                                         cl_obj = clust_list[[1]],
-                                        probs = probs)
+                                        probs = probs,
+                                        dig = dig)
   
   if(length(clust_list) <= 1) return(summ_table)
   
@@ -156,7 +178,8 @@ proximity_summary <- function(clust_list, names, dat, probs = c(0, 0.25, 0.5, 0.
     summ_table <- rbind(summ_table,
                         table_proximity_summary(data = dat,
                                                 cl_obj = clust_list[[i]],
-                                                probs = probs))
+                                                probs = probs,
+                                                dig = dig))
   }
   
   summ_table <- 
@@ -241,7 +264,8 @@ weights_and_dist <- function(coords, weights, cl_obj){
   
   for (i in 1:length(points)) {
     d[i,] <- apply(centers, MARGIN = 1, FUN =  function(x) {
-      pracma::haversine(x, coords[points[i],])
+      # pracma::haversine(x, coords[points[i],])
+      euc_dist(x, coords[points[i],])
     })  
     w[i,] <- cl_obj$assign_frac[points[i],1:k] * weights[points[i]]  
   }

@@ -23,6 +23,11 @@ library(Gmedian)
 library(lcmix) # Added by Markku. Package can be found at R-Forge
 library(parallel) # For parallel computing. rpack uses function "detectCores".
 library(flexmix)
+
+#devtools::install_github("cmartin/ggConvexHull")
+library(ggConvexHull)
+
+theme_set(theme_minimal())
 ```
 
 ## External functions
@@ -33,9 +38,12 @@ These are added by Markku. These external functions generate data from gamma dis
 source("CodeCollection/simulate_gamma_mixture.R")
 source("CodeCollection/simulate_unif_grid.R")
 source("CodeCollection/utility_functions.R")
+source("functions_rpack.R")
+source("functions_summary.R")
+
 
 # Get the colors for plotting
-c_col <- get_cols() 
+col_pal <- get_cols() 
 ```
 
 ## Simple example
@@ -50,24 +58,22 @@ sd1 <- sd2 <- 5
 N1 <- 100
 N2 <- 10
 
-a <- rnorm(n=N1, mean=m1, sd=sd1)
-b <- rnorm(n=N2, mean=m2, sd=sd2)
+dat <- tibble(
+  x = c(rnorm(n=N1, mean=m1, sd=sd1),rnorm(n=N2, mean=m2, sd=sd2)),
+  group = c(rep('a', N1), rep('b', N2)) |> as.factor()
+)
 
-x <- c(a,b)
-class <- c(rep('a', N1), rep('b', N2))
-data <- data.frame(cbind(x=as.numeric(x), class=as.factor(class)))
+dat |> 
+  ggplot(aes(x = x, fill = group))  +
+  geom_segment(x = m1, y = 0, xend = m1, yend = 0.75, col = col_pal[1], size = 1.5) + 
+  geom_segment(x = m2, y = 0, xend = m2, yend = 0.75, col = col_pal[2], size = 1.5)+
+  scale_fill_manual(values = col_pal)+
+  geom_dotplot(binwidth = 2)
 ```
 
 Fit two gaussians to the data.
 
 ```{r}
-library("ggplot2")
-p <- ggplot(data, aes(x = x)) + 
-  geom_histogram(aes(x, ..density..), binwidth = 1, colour = "black", fill = "white") +
-  geom_vline(xintercept = m1, col = "red", size = 2) + 
-  geom_vline(xintercept = m2, col = "blue", size = 2)
-p
-
 set.seed(0)
 
 mo1 <- FLXMRglm(family = "gaussian")
@@ -76,7 +82,7 @@ flexfit <- flexmix(x ~ 1, data = data, k = 2, model = list(mo1, mo2))
 
 # So how did we do? It looks like we got class assignments perfectly
 
-print(table(clusters(flexfit), data$class))
+print(table(clusters(flexfit), data$group))
 ```
 
 Lastly, let's visualize the fitted model along with the data.
@@ -102,10 +108,10 @@ ggplot(data) +
 geom_histogram(aes(x, ..density..), binwidth = 1, colour = "black", fill = "white") +
 stat_function(geom = "line", fun = plot_mix_comps,
                 args = list(c1[1], c1[2], lam[1]/sum(lam)),
-                colour = "red", lwd = 1.5) +
+                colour = col_pal[2], lwd = 1.5) +
 stat_function(geom = "line", fun = plot_mix_comps,
                 args = list(c2[1], c2[2], lam[2]/sum(lam)),
-                colour = "blue", lwd = 1.5) +
+                colour = col_pal[1], lwd = 1.5) +
 ylab("Density")
 ```
 
@@ -121,10 +127,10 @@ Some simulated clusters have heavy weight points at edge of clusters (50/50 chan
 
 ```{r}
 # Initialize seed number:
-#seed = Sys.time()
-#seed = as.integer(seed)
-#seed = seed %% 100000
-seed = 10376
+# seed = Sys.time()
+# seed = as.integer(seed)
+# seed = seed %% 100000
+seed = 4499
 set.seed(seed)
 k = 10 # ten clusters
 n = c(20, 40, 60, 80, 50, 80, 60, 40, 20, 50) # uneven cluster sizes
@@ -142,39 +148,29 @@ test_dat = simulate_gamma_mixture(
   overlap_scale = 0.5
 )
 true_mu <- test_dat$mu_true
-test_dat <- test_dat$Y
-
-# Ids in interactive plot
-id <-  1:nrow(test_dat)
+test_dat <- test_dat$Y |> as_tibble()
 
 plot_sim <-
   ggplot(data = test_dat, aes(
     x = x,
     y = y,
-    size = w,
-    label = id
+    size = w
   )) +
   geom_point() +
   scale_size(range = c(2, 6)) +  # Scale objects sizes
   guides(color = guide_legend(# Point size in legend
     override.aes = list(size = 5))) +
-  labs(x = "x", y = "y", title = "Unclustered data") +
-  theme(
-    legend.position = "right",
-    # Legend position and removing ticks from axis
-    axis.text.x = ggplot2::element_blank(),
-    axis.text.y = ggplot2::element_blank(),
-    axis.ticks = ggplot2::element_blank()
-  )
+  labs(x = "x", y = "y") +
+  coord_fixed()
 
-ggplotly(plot_sim, tooltip = c("id", "w"))
+plot_sim
 ```
 
 Fit a normal mixture model to the data we just simulated.
 
 ```{r}
 formula <- cbind(test_dat$x, test_dat$y) ~ 1
-set.seed(1)
+set.seed(0)
 test_flexfit <- flexmix(
   formula = formula,
   k = k,
@@ -183,32 +179,35 @@ test_flexfit <- flexmix(
 print(table(clusters(test_flexfit), test_dat$orig_group))
 ```
 
-Interestingly, we were able to find only 7 clusters.
+Interestingly, we were able to find only 5 clusters.
 
-```{r, include=FALSE}
-fit_mu <- test_flexfit |> 
-  parameters() |>
-  {\(x) x[paste("center", 1:2, sep = ""),]}() |> 
-  t()
-
-fit_cov <- test_flexfit |> 
-  parameters() |> 
-  {\(x) x[paste("cov", 1:4, sep = ""),]}() |> 
-  t() |> 
-  split(f = 1:7) |> 
-  vapply(FUN = function(x) matrix(x, nrow = 2, ncol = 2),
-         FUN.VALUE = matrix(rep(1,4), ncol = 2, nrow = 2))
-
-data_grid <- expand.grid(x = seq(0, 1, length.out = 100), y = seq(0, 1, length.out = 100))
+```{r}
+test_dat$flexmix_cl <- clusters(test_flexfit) |> as.factor()
 
 
-m <- c(.5, -.5)
-sigma <- matrix(c(1,.5,.5,1), nrow=2)
-data.grid <- expand.grid(s.1 = seq(-3, 3, length.out=200), s.2 = seq(-3, 3, length.out=200))
-q.samp <- cbind(data.grid, prob = mvtnorm::dmvnorm(data.grid, mean = m, sigma = sigma))
-ggplot(q.samp, aes(x=s.1, y=s.2, z=prob)) + 
-    geom_contour() +
-    coord_fixed(xlim = c(-3, 3), ylim = c(-3, 3), ratio = 1) 
+test_dat |> filter(!is_outlier) |> 
+  ggplot(aes(x = x, y = y, size = w)) +
+  geom_convexhull(aes(fill = orig_group), alpha = 0.3)+
+  geom_point(aes(color = orig_group)) +
+  geom_point(data = test_dat |> filter(is_outlier), 
+             aes(x = x, y = y), size = 2, shape = 4, stroke = 2) +
+  scale_color_manual(values = col_pal) +
+  scale_fill_manual(values = col_pal) +
+  labs(title = "Original clustering", 
+       fill = "Clustering", 
+       col = "Clustering") +
+  guides(size = "none") +
+
+test_dat |> 
+  ggplot(aes(x = x, y = y, size = w)) +
+  geom_convexhull(aes(fill = flexmix_cl), alpha = 0.3)+
+  geom_point(aes(color = flexmix_cl)) +
+  scale_color_manual(values = col_pal) +
+  scale_fill_manual(values = col_pal) +
+  labs(title = "Clustering with flexmix", 
+       fill = "Clustering", 
+       col = "Clustering") +
+  guides(size = "none")
 ```
 
 ## Model-based clustring with stan

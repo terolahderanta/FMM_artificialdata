@@ -7,8 +7,8 @@ clust_with_params_list <- function(dat_list, lambda_par, lambda,...){
       ret_list,
       list(clust_with_params(
         coords = dat_list[[i]]$Y |> dplyr::select(x, y),
-        params = dat_list[[i]]$Y %>% dplyr::select(par1,par2,par3),
-        weights = dat_list[[i]]$Y %>% pull(w),
+        params = dat_list[[i]]$Y |> dplyr::select(par1,par2,par3),
+        weights = dat_list[[i]]$Y |> pull(w),
         lambda_par = lambda_par,
         lambda = lambda,
         ...
@@ -324,7 +324,7 @@ alt_alg <- function(coords,
                     N = 10, 
                     range = c(min(weights)/2, sum(weights)),
                     capacity_weights = weights, 
-                    d = euc_dist2,
+                    d = euc_dist,
                     center_init = "random", 
                     lambda = NULL,
                     frac_memb = FALSE, 
@@ -404,11 +404,13 @@ alt_alg <- function(coords,
           apply(
             X = coords,
             MARGIN = 1,
-            FUN = hav.dist2,
+            FUN = rpack::euc_dist,
             x2 = x
           )
         }
-      ) |> scale()
+      )
+      
+      dist_mat_coords <- dist_mat_coords / max(dist_mat_coords)
       
       # Calculate distance matrix based on parameter distance
       dist_mat_params <- apply(
@@ -422,7 +424,9 @@ alt_alg <- function(coords,
             x2 = x
           )
         }
-      ) |> scale()
+      )
+      
+      dist_mat_params <- dist_mat_params / max(dist_mat_params)
       
       # Combine the two distance matrix with lambda
       dist_mat <- lambda_params * dist_mat_coords +
@@ -583,7 +587,8 @@ capacitated_LA <- function(coords,
     
     if(place_to_point){
       
-      fixed_center_ids <- prodlim::row.match(fixed_centers %>% as.data.frame(), coords %>% as.data.frame())
+      fixed_center_ids <- prodlim::row.match(fixed_centers %>% as.data.frame(), 
+                                             coords %>% as.data.frame())
       #fixed_center_ids <- which(
       #  ((coords %>% pull(1)) %in% (fixed_centers %>% pull(1))) & 
       #    ((coords %>% pull(2)) %in% (fixed_centers %>% pull(2)))

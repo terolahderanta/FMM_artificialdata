@@ -1,9 +1,14 @@
 get_cols <- function(){
-  return(c("blue","red","green","orange","hotpink","cyan","yellowgreen","purple",
-           "chocolate","darkred","yellow3","darkgreen","bisque4","magenta",
-           "royalblue","tomato4","steelblue1",
-           "seagreen4","orangered","darkblue","khaki3","lavender","deeppink2",
-           "coral3","beige","brown4","indianred1","lightgreen","orchid"))
+  # Color blind friendly
+  return(c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2",
+           "#D55E00", "#CC79A7", "#9B0560", "#7B543F", "#89FCD0", "#000000"))
+  
+  # Old colors
+  # return(c("blue","red","green","orange","hotpink","cyan","yellowgreen","purple",
+  #          "chocolate","darkred","yellow3","darkgreen","bisque4","magenta",
+  #          "royalblue","tomato4","steelblue1",
+  #          "seagreen4","orangered","darkblue","khaki3","lavender","deeppink2",
+  #          "coral3","beige","brown4","indianred1","lightgreen","orchid"))
 }
 
 plot_cl = function (coords, weights, clusters, centers, title = "", subtitle = NULL, outgroup_label=99, outgroup_legend = "outgroup") 
@@ -53,7 +58,6 @@ plot_cl = function (coords, weights, clusters, centers, title = "", subtitle = N
   return(plot)
   
 }
-
 
 #' Determinates the squared distance between two points given their longitudes and latitudes
 #'
@@ -134,39 +138,6 @@ plot_point_gradient <- function(dat, par = "par1", high = "#21D6DD", low = "#000
     )+
     coord_fixed(ratio = 1)
 }
-
-#' #' Determinates the squared distance between two points given their longitudes and latitudes and their parameters
-#' #'
-#' #' @param x1 Longitude and latitude of point 1 (coordinates and parameters).
-#' #' @param x2 Longitude and latitude of point 2 (coordinates and parameters).
-#' #' @return Squared euclidean distance between two points.
-#' #' @export
-#' #'
-#' #' @examples
-# hav.dist2_par <- function(x1, x2, lambda) {
-# 
-#   #lambda <- 0.99
-# 
-#   n_coords <- 2
-#   x1_coord <- x1[1:n_coords]
-#   x2_coord <- x2[1:n_coords]
-#   x1_par <- x1[-(1:n_coords)]
-#   x2_par <- x2[-(1:n_coords)]
-# 
-# 
-#   long1 <- x1_coord[1]
-#   lat1 <- x1_coord[2]
-#   long2 <- x2_coord[1]
-#   lat2 <- x2_coord[2]
-#   R <- 6371
-#   diff.long <- (long2 - long1)
-#   diff.lat <- (lat2 - lat1)
-#   a <- sin(diff.lat/2)^2 + cos(lat1) * cos(lat2) * sin(diff.long/2)^2
-#   b <- 2 * asin(pmin(1, sqrt(a)))
-#   d = R * b
-#   return(lambda*d^2 + (1-lambda)*(x1_par - x2_par)^2)
-# }
-
 
 plot_nonspat_attributes <- function(dat){
   dat$Y |> 
@@ -296,4 +267,89 @@ plot_division_example <- function(dat){
     guides(color = "none",
            size = "none") +
     coord_fixed(ratio = 1)
+}
+
+
+# Get the full summary table of the clustering
+full_summary <- function(clust_dat, clust_names){
+  
+  prox_summary <-
+    proximity_summary(clust_list = clust_dat[-1],
+                      names = clust_names,
+                      dat = dat$Y) |>
+    select(name, Mean) |>
+    group_by(name) |>
+    summarise(Mean = mean(Mean))
+  
+  dur_sd_summary <-
+    duration_sd_summary(clust_list = clust_dat[-1],
+                        names = clust_names,
+                        dat = dat$Y) |>
+    select(name, Mean) |>
+    group_by(name) |>
+    summarise(Mean = mean(Mean))
+  
+  dur_sd_summary |> 
+    mutate(par = str_sub(name, 1,4), .after = 1) |> 
+    mutate(name = str_sub(name, 6,-1) |> str_replace("lambda", "lambda=")) |> 
+    pivot_wider(values_from = Mean, names_from = par, names_prefix = "mean_sd_") |> 
+    full_join(prox_summary, by = "name")
+}
+
+# Plot clusterings in facets with input of clustering list
+plot_cl_facet <- function(clust_dat, dat, clusterings = 1:10, lambda_d = seq(0.1,1,0.1)) {
+  
+  clust_titles <- paste0("cl", 1:10)
+  
+  clust_tibble <- clust_dat |>
+    map("clusters") |>
+    do.call(what = rbind.data.frame) |>
+    t() |>
+    as_tibble(
+      .name_repair = function(names) {
+        clust_titles
+      }
+    ) |>
+    mutate_all(.funs = list(function(x) {
+      as.factor(x)
+    })) |> 
+    select(clust_titles[clusterings])
+  
+  fulldat <- dat$Y |>
+    cbind(clust_tibble) |>
+    pivot_longer(cols = starts_with("cl"),
+                 names_to = "clustering",
+                 values_to = "cluster") |>
+    mutate(clustering = factor(clustering, levels = clust_titles))
+  
+  facet_labels <- sapply(lambda_d[clusterings], 
+                         FUN = function(x){bquote(lambda[d]==.(x))})
+
+  fulldat |>
+    ggplot(aes(x = x, y = y, size = w)) +
+    geom_convexhull(data = fulldat |> filter(cluster != 99),
+                    aes(fill = cluster),
+                    alpha = 0.3) +
+    geom_point(data = fulldat |> filter(cluster != 99), aes(color = cluster)) +
+    geom_point(data = fulldat |> filter(cluster == 99), color = "black", shape = 4) +
+    geom_hline(data = NULL, 
+               yintercept = dat$div["y"], 
+               color = "black",
+               linetype = "dashed") +
+    geom_vline(data = NULL, 
+               xintercept = dat$div["x"], 
+               color = "black",
+               linetype = "dashed") +
+    scale_color_manual(values = colpal) +
+    scale_fill_manual(values = colpal) +
+    scale_x_continuous(breaks = c(0.0, 0.5, 1.0)) +
+    scale_y_continuous(breaks = c(0.0, 0.5, 1.0)) +
+    coord_fixed() +
+    scale_size(range = c(0.5, 1)) +
+    labs(fill = "Cluster",
+         col = "Cluster") +
+    guides(size = "none", color = "none", fill = "none") +
+    facet_wrap(vars(clustering), 
+               labeller = function(x){tibble(names = facet_labels)}) +
+    theme_bw()
 }
